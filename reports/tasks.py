@@ -1,61 +1,74 @@
-from celery import shared_task
-import requests
 import logging
-from django.core.mail import send_mail
-from .models import PhishingReport
+import requests
 from urllib.parse import urlparse
-
 from celery import shared_task
+from .models import PhishingReport
 from .telemetry import log_report_counts
 
+WHOIS_API_URL = "https://www.whoisxmlapi.com/whoisserver/WhoisService"
+WHOIS_API_KEY = "your_real_whois_api_key_here"  # <- put your real key
+
+TAKEDOWN_WEBHOOK_URL = "https://phish.report/api/report"  # real endpoint you use
+
 @shared_task(bind=True, max_retries=3)
-def forward_report_to_services(self, report_id, url):
+def forward_report_to_services(self, report_id):
     try:
-        # 1️⃣ Forward to PhishTank
-        phishtank_response = requests.post(
-            "http://checkurl.phishtank.com/checkurl/",
-            data={"url": url, "format": "json"},
-            timeout=5
-        )
-        logging.info(f"PhishTank response for report {report_id}: {phishtank_response.status_code}")
+        report = PhishingReport.objects.get(id=report_id)
+        url = report.url.strip().lower()
 
-        # 2️⃣ Mock: Forward to Bank Webhook
-        bank_domain = urlparse(url).netloc or "unknown-bank.com"
-        bank_webhook = f"https://{bank_domain}/api/phishing-webhook"
+        # Extract domain from URL
+        domain = urlparse(url).netloc
+        report.domain = domain
+        report.save(update_fields=['domain'])
 
+        # Call WHOIS API for domain info
+        whois_params = {
+            "apiKey": WHOIS_API_KEY,
+            "domainName": domain,
+            "outputFormat": "JSON"
+        }
+        whois_response = requests.get(WHOIS_API_URL, params=whois_params, timeout=10)
+        whois_response.raise_for_status()
+        whois_data = whois_response.json()
+
+        # Parse WHOIS fields (adjust based on actual response)
+        whois_record = whois_data.get("WhoisRecord", {})
+        registrar = whois_record.get("registrarName")
+        created_date = whois_record.get("createdDate")
+        expires_date = whois_record.get("expiresDate")
+
+        # Save WHOIS info
+        report.whois_registrar = registrar
+        report.whois_creation_date = created_date[:10] if created_date else None
+        report.whois_expiry_date = expires_date[:10] if expires_date else None
+        report.save(update_fields=['whois_registrar', 'whois_creation_date', 'whois_expiry_date'])
+
+        # Prepare enriched payload for takedown
         payload = {
-            "phishing_url": url,
-            "report_id": report_id,
-            "detected_by": "SafeBank Guard",
+            "url": url,
+            "domain": domain,
+            "whois": {
+                "registrar": registrar,
+                "creation_date": created_date,
+                "expiry_date": expires_date,
+            },
+            "ip_address_hash": report.ip_address,
+            "user_agent": report.user_agent,
+            "extension_version": report.extension_version,
+            "created_at": report.created_at.isoformat(),
         }
 
-        response = requests.post(bank_webhook, json=payload, timeout=5)
-        if 200 <= response.status_code < 300:
-            logging.info(f"Forwarded report {report_id} to {bank_webhook}")
+        # Send to takedown webhook
+        takedown_response = requests.post(TAKEDOWN_WEBHOOK_URL, json=payload, timeout=10)
+        if takedown_response.status_code == 200:
+            logging.info(f"✅ Report {report_id} sent successfully")
         else:
-            logging.warning(f"Bank webhook error for report {report_id}: {response.status_code}")
-
-        # 3️⃣ Email abuse@bank (for human teams)
-        send_mail(
-            subject='🚨 Phishing Attempt Detected',
-            message=(
-                f"A phishing site has been reported:\n\n"
-                f"🔗 URL: {url}\n"
-                f"🕵️‍♂️ Detected by: SafeBank Guard\n"
-                f"📄 Report ID: {report_id}"
-            ),
-            from_email=None,  # uses DEFAULT_FROM_EMAIL
-            recipient_list=[f'abuse@{bank_domain}'],
-            fail_silently=False,
-        )
-        logging.info(f"Abuse email sent to abuse@{bank_domain} for report {report_id}")
+            logging.warning(f"⚠️ Report {report_id} takedown webhook failed: {takedown_response.status_code}")
+            raise Exception("Takedown webhook error")
 
     except Exception as e:
-        logging.error(f"Error forwarding phishing report {report_id}: {str(e)}")
+        logging.error(f"❌ Error processing report {report_id}: {e}")
         self.retry(exc=e, countdown=10)
-
-
-
 
 
 @shared_task

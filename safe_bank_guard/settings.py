@@ -154,17 +154,7 @@ CELERY_BROKER_URL = 'redis://localhost:6379/0'
 
 
 
-# Email Configuration
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-
-EMAIL_HOST_USER = 'safebankguard@gmail.com'         # ✅ Your Gmail address
-EMAIL_HOST_PASSWORD = 'cxcg mfub dhqw hlhc'   # ✅ App password, not your Gmail password
-
-DEFAULT_FROM_EMAIL = 'SafeBank Guard <noreply@bankguard@gmail.com>'  # ✅ What the receiver sees
-
+ 
 # Celery Beats {REMEmber to Start the workers}
 
 

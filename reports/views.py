@@ -6,6 +6,16 @@ from .tasks import forward_report_to_services  # ✅ Example Celery task
 from rest_framework.views import APIView
 from rest_framework.response import Response 
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+from .models import PhishingReport
+from .tasks import forward_report_to_services
+
+from .serializers import TelemetryEventSerializer
+
+
+
 class PhishingReportViewSet(viewsets.ModelViewSet):
     queryset = PhishingReport.objects.all().order_by('-created_at')
     serializer_class = PhishingReportSerializer
@@ -21,6 +31,7 @@ class PhishingReportViewSet(viewsets.ModelViewSet):
         request = self.request
         ip = request.META.get('REMOTE_ADDR', '')
         user_agent = request.META.get('HTTP_USER_AGENT', '')
+        extension_version = request.headers.get('X-Extension-Version', 'unknown')
 
         # ✅ Hash IP for privacy
         import hashlib
@@ -29,11 +40,12 @@ class PhishingReportViewSet(viewsets.ModelViewSet):
         # ✅ Save report
         report = serializer.save(
             ip_address=hashed_ip,
-            user_agent=user_agent
+            user_agent=user_agent,
+            extension_version=extension_version
         )
 
         # ✅ Fire async task (Celery)
-        forward_report_to_services.delay(report.id, report.url)
+        forward_report_to_services.delay(report.id)
 
 
 
@@ -58,3 +70,15 @@ class CheckPhishingAPIView(APIView):
             "phishing": False,
             "message": "✅ This domain appears clean."
         })
+
+
+
+class TelemetryEventAPIView(APIView):
+    permission_classes = []  # open or add auth if needed
+
+    def post(self, request):
+        serializer = TelemetryEventSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Telemetry event saved"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

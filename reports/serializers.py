@@ -2,6 +2,7 @@ import re
 import hashlib
 from rest_framework import serializers
 from .models import PhishingReport
+from .models import TelemetryEvent
 
 class PhishingReportSerializer(serializers.ModelSerializer):
     class Meta:
@@ -29,4 +30,12 @@ class PhishingReportSerializer(serializers.ModelSerializer):
             hashed_ip = hashlib.sha256(ip.encode()).hexdigest()
             validated_data['ip_address'] = hashed_ip
             validated_data['user_agent'] = request.META.get('HTTP_USER_AGENT', '')
+            validated_data['extension_version'] = request.headers.get('X-Extension-Version', 'unknown')
         return super().create(validated_data)
+
+
+class TelemetryEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TelemetryEvent
+        fields = ['id', 'event_type', 'timestamp', 'metadata']
+        read_only_fields = ['id', 'timestamp']
