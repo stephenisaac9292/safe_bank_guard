@@ -1,31 +1,25 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import PhishingReport
-from .serializers import PhishingReportSerializer
-from .tasks import forward_report_to_services  # ✅ Example Celery task
-from rest_framework.views import APIView
-from rest_framework.response import Response 
-
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, permissions
-from .models import PhishingReport
+
+from .models import PhishingReport, TelemetryEvent
+from .serializers import PhishingReportSerializer, TelemetryEventSerializer
 from .tasks import forward_report_to_services
 
-from .serializers import TelemetryEventSerializer
-
+import hashlib
 
 
 class PhishingReportViewSet(viewsets.ModelViewSet):
     queryset = PhishingReport.objects.all().order_by('-created_at')
     serializer_class = PhishingReportSerializer
-    parser_classes = (MultiPartParser, FormParser)  # allow file uploads
+    parser_classes = (MultiPartParser, FormParser)
 
     def get_permissions(self):
-        # ✅ Allow anonymous POST, require admin for everything else
+        # ✅ Allow anonymous POST, require admin for others
         if self.request.method == 'POST':
             return []
-        return [permissions.IsAdminUser()]  # 🔐 Admins only
+        return [permissions.IsAdminUser()]
 
     def perform_create(self, serializer):
         request = self.request
@@ -33,28 +27,22 @@ class PhishingReportViewSet(viewsets.ModelViewSet):
         user_agent = request.META.get('HTTP_USER_AGENT', '')
         extension_version = request.headers.get('X-Extension-Version', 'unknown')
 
-        # ✅ Hash IP for privacy
-        import hashlib
         hashed_ip = hashlib.sha256(ip.encode()).hexdigest()
 
-        # ✅ Save report
         report = serializer.save(
             ip_address=hashed_ip,
             user_agent=user_agent,
             extension_version=extension_version
         )
 
-        # ✅ Fire async task (Celery)
         forward_report_to_services.delay(report.id)
-
-
 
 
 class CheckPhishingAPIView(APIView):
     def get(self, request):
         url = request.query_params.get("url")
         if not url:
-            return Response({"error": "Missing URL"}, status=400)
+            return Response({"error": "Missing URL"}, status=status.HTTP_400_BAD_REQUEST)
 
         url = url.strip().lower()
         report = PhishingReport.objects.filter(url__icontains=url).order_by('-created_at').first()
@@ -72,13 +60,20 @@ class CheckPhishingAPIView(APIView):
         })
 
 
-
-class TelemetryEventAPIView(APIView):
-    permission_classes = []  # open or add auth if needed
-
+class TelemetryEventView(APIView):
     def post(self, request):
-        serializer = TelemetryEventSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Telemetry event saved"}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = request.data
+        event_type = data.get("event_type", "feature_used")
+        metadata = data.get("metadata", {})
+
+        TelemetryEvent.objects.create(
+            event_type=event_type,
+            metadata=metadata
+        )
+        return Response({"message": "Telemetry saved"}, status=status.HTTP_201_CREATED)
+
+        # 👉 Trigger VirusTotal task if domain was submitted
+        if event_type == "domain_submitted":
+            push_unsent_telemetry_to_virustotal.delay()
+
+        return Response({"message": "Telemetry saved"}, status=201)

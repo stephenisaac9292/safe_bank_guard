@@ -37,5 +37,5 @@ class PhishingReportSerializer(serializers.ModelSerializer):
 class TelemetryEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = TelemetryEvent
-        fields = ['id', 'event_type', 'timestamp', 'metadata']
-        read_only_fields = ['id', 'timestamp']
+        fields = ['id', 'event_type', 'timestamp', 'metadata', 'sent_to_virustotal']
+        read_only_fields = ['id', 'timestamp', 'sent_to_virustotal']
