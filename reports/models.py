@@ -1,6 +1,7 @@
 from django.db import models
 from urllib.parse import urlparse
 from django.utils import timezone
+from django.contrib.postgres.fields import ArrayField
 
 
 class PhishingReport(models.Model):
@@ -56,3 +57,17 @@ class TelemetryEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type} at {self.timestamp}"
+
+
+# OPTED IN BANKS DATABASE
+class Bank(models.Model):
+    bank_name = models.CharField(max_length=255, unique=True)
+    targeted_domains = ArrayField(models.CharField(max_length=255))
+    webhook_url = models.URLField()
+    auth_token = models.CharField(max_length=255, blank=True, null=True)
+    is_opted_in = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.bank_name

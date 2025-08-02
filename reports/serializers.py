@@ -3,6 +3,7 @@ import hashlib
 from rest_framework import serializers
 from .models import PhishingReport
 from .models import TelemetryEvent
+from urllib.parse import urlparse
 
 class PhishingReportSerializer(serializers.ModelSerializer):
     class Meta:
@@ -39,3 +40,22 @@ class TelemetryEventSerializer(serializers.ModelSerializer):
         model = TelemetryEvent
         fields = ['id', 'event_type', 'timestamp', 'metadata', 'sent_to_virustotal']
         read_only_fields = ['id', 'timestamp', 'sent_to_virustotal']
+
+
+# Cleaning bank opt-in data
+
+class BankOptInSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bank
+        fields = ['bank_name', 'targeted_domains', 'webhook_url', 'auth_token', 'is_opted_in']
+
+    def validate_webhook_url(self, value):
+        parsed = urlparse(value)
+        if parsed.scheme != 'https':
+            raise serializers.ValidationError("Webhook URL must use HTTPS.")
+        return value
+
+    def validate_targeted_domains(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one domain is required.")
+        return [v.lower().strip() for v in value]

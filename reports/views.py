@@ -3,11 +3,21 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from .models import PhishingReport, TelemetryEvent
-from .serializers import PhishingReportSerializer, TelemetryEventSerializer
+from .models import PhishingReport, TelemetryEvent, Bank 
+from .serializers import PhishingReportSerializer, TelemetryEventSerializer, BankOptInSerializer
 from .tasks import forward_report_to_services
 
 import hashlib
+
+from rest_framework import generics, status
+from rest_framework.response import Response
+ 
+
+ 
+ 
+ 
+ 
+  
 
 
 class PhishingReportViewSet(viewsets.ModelViewSet):
@@ -77,3 +87,26 @@ class TelemetryEventView(APIView):
             push_unsent_telemetry_to_virustotal.delay()
 
         return Response({"message": "Telemetry saved"}, status=201)
+
+
+
+
+class BankOptInView(generics.CreateAPIView):
+    queryset = Bank.objects.all()
+    serializer_class = BankOptInSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        bank_name = serializer.validated_data['bank_name']
+        bank, created = Bank.objects.update_or_create(
+            bank_name=bank_name,
+            defaults=serializer.validated_data
+        )
+
+        return Response({
+            "message": "Opt-in successful",
+            "bank_id": bank.id,
+            "is_new": created
+        }, status=status.HTTP_201_CREATED)
