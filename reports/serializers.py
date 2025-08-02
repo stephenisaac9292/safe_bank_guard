@@ -1,8 +1,8 @@
 import re
 import hashlib
 from rest_framework import serializers
-from .models import PhishingReport
-from .models import TelemetryEvent
+from .models import PhishingReport, TelemetryEvent, Bank
+ 
 from urllib.parse import urlparse
 
 class PhishingReportSerializer(serializers.ModelSerializer):
