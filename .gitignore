@@ -1,0 +1,19 @@
+venv/
+venv_win/
+-to do list*
+media/
+*/__init__.py
+*/__pycache__/
+*/migrations/
+safe_bank_guard/__pycache__/
+FQA/migrations/__pycache__/
+chat/__pycache__/
+chat/migrations/__pycache__/
+prloapp/migrations/__pycache__/
+selfassessment/templatetags/__init__.py
+selfassessment/templatetags/__pycache__/
+prloapp/templatetags/__pycache__/
+userprofile/__init__.py
+userprofile/migrations/__pycache__/
+client_secrets_2.json
+credentials_2.json

@@ -1,5 +1,5 @@
 from rest_framework import viewsets, permissions, status
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
@@ -23,7 +23,7 @@ from rest_framework.response import Response
 class PhishingReportViewSet(viewsets.ModelViewSet):
     queryset = PhishingReport.objects.all().order_by('-created_at')
     serializer_class = PhishingReportSerializer
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_permissions(self):
         # ✅ Allow anonymous POST, require admin for others
