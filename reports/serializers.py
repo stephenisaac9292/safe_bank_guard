@@ -2,17 +2,16 @@ import re
 import hashlib
 from rest_framework import serializers
 from .models import PhishingReport, TelemetryEvent, Bank
- 
 from urllib.parse import urlparse
+
 
 class PhishingReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = PhishingReport
-        fields = ['id', 'url', 'description', 'screenshot', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id','url', 'description', 'screenshot', 'created_at']
+        read_only_fields = ['id','created_at']
 
     def validate_description(self, value):
-        # Sanitize PII (emails, phones, numbers)
         clean = value.strip()
         clean = re.sub(r'[\w\.-]+@[\w\.-]+', '[email removed]', clean)
         clean = re.sub(r'(\+?\d[\d\s\-\(\)]{7,})', '[phone removed]', clean)
@@ -25,14 +24,22 @@ class PhishingReportSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        request = self.context.get('request')
-        if request:
-            ip = request.META.get('REMOTE_ADDR', '')
-            hashed_ip = hashlib.sha256(ip.encode()).hexdigest()
-            validated_data['ip_address'] = hashed_ip
-            validated_data['user_agent'] = request.META.get('HTTP_USER_AGENT', '')
-            validated_data['extension_version'] = request.headers.get('X-Extension-Version', 'unknown')
-        return super().create(validated_data)
+
+        #Get metadata passed through serializer context from views 
+        ip = self.context.get('ip')
+        user_agent = self.context.get('user_agent')
+        extension_version = self.context.get('extension_version')
+
+        # Create the report object in the database 
+
+        report = PhishingReport.objects.create(
+            **validated_data,
+            ip_address=ip,
+            user_agent=user_agent,
+            extension_version=extension_version
+        )
+        return report
+
 
 
 class TelemetryEventSerializer(serializers.ModelSerializer):
@@ -41,8 +48,6 @@ class TelemetryEventSerializer(serializers.ModelSerializer):
         fields = ['id', 'event_type', 'timestamp', 'metadata', 'sent_to_virustotal']
         read_only_fields = ['id', 'timestamp', 'sent_to_virustotal']
 
-
-# Cleaning bank opt-in data
 
 class BankOptInSerializer(serializers.ModelSerializer):
     class Meta:
@@ -59,3 +64,9 @@ class BankOptInSerializer(serializers.ModelSerializer):
         if not value:
             raise serializers.ValidationError("At least one domain is required.")
         return [v.lower().strip() for v in value]
+
+
+class ExtensionInitSerializer(serializers.Serializer):
+    device_id = serializers.CharField(max_length=128)
+    version = serializers.CharField(max_length=32)
+    platform = serializers.ChoiceField(choices=["windows", "macos", "linux", "android", "ios", "unknown"])

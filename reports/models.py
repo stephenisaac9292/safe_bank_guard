@@ -6,7 +6,7 @@ from django.contrib.postgres.fields import ArrayField
 
 class PhishingReport(models.Model):
     url = models.URLField(help_text="The suspicious URL submitted")
-    domain = models.CharField(max_length=255, blank=True, help_text="Extracted domain from the URL")
+    domain = models.CharField(max_length=255, blank=True, null=True, help_text="Extracted domain from the URL")
     description = models.TextField(blank=True, help_text="Optional description of the issue")
 
     screenshot = models.ImageField(
@@ -33,13 +33,12 @@ class PhishingReport(models.Model):
         if self.url:
             parsed_url = urlparse(self.url)
             self.domain = parsed_url.netloc
-        super().save(*args, **kwargs)
+        return super().save(*args, **kwargs)  # ✅ this ensures proper behavior
+
 
     def __str__(self):
         return f"{self.domain} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
 
-
-# === Telemetry Events ===
 
 class TelemetryEvent(models.Model):
     EVENT_TYPES = [
@@ -59,7 +58,6 @@ class TelemetryEvent(models.Model):
         return f"{self.event_type} at {self.timestamp}"
 
 
-# OPTED IN BANKS DATABASE
 class Bank(models.Model):
     bank_name = models.CharField(max_length=255, unique=True)
     targeted_domains = ArrayField(models.CharField(max_length=255))

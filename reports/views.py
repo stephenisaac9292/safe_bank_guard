@@ -8,17 +8,10 @@ from .serializers import PhishingReportSerializer, TelemetryEventSerializer, Ban
 from .tasks import forward_report_to_services
 
 import hashlib
-
-from rest_framework import generics, status
-from rest_framework.response import Response
- 
-
- 
- 
- 
- 
-  
-
+from rest_framework import generics
+from django.contrib.auth.models import AnonymousUser
+from rest_framework_simplejwt.tokens import RefreshToken
+from .serializers import ExtensionInitSerializer
 
 class PhishingReportViewSet(viewsets.ModelViewSet):
     queryset = PhishingReport.objects.all().order_by('-created_at')
@@ -39,12 +32,18 @@ class PhishingReportViewSet(viewsets.ModelViewSet):
 
         hashed_ip = hashlib.sha256(ip.encode()).hexdigest()
 
-        report = serializer.save(
-            ip_address=hashed_ip,
-            user_agent=user_agent,
-            extension_version=extension_version
+        # Passig meta to serialiers
+        serializer = PhishingReportSerializer(
+            data=serializer.initial_data,
+            context={
+                'ip': hashed_ip,
+                'user_agent': user_agent,
+                'extension_version': extension_version
+            }
         )
 
+        serializer.is_valid(raise_exception=True)
+        report = serializer.save()
         forward_report_to_services.delay(report.id)
 
 
@@ -69,7 +68,6 @@ class CheckPhishingAPIView(APIView):
             "message": "✅ This domain appears clean."
         })
 
-
 class TelemetryEventView(APIView):
     def post(self, request):
         data = request.data
@@ -85,11 +83,6 @@ class TelemetryEventView(APIView):
         # 👉 Trigger VirusTotal task if domain was submitted
         if event_type == "domain_submitted":
             push_unsent_telemetry_to_virustotal.delay()
-
-        return Response({"message": "Telemetry saved"}, status=201)
-
-
-
 
 class BankOptInView(generics.CreateAPIView):
     queryset = Bank.objects.all()
@@ -110,3 +103,19 @@ class BankOptInView(generics.CreateAPIView):
             "bank_id": bank.id,
             "is_new": created
         }, status=status.HTTP_201_CREATED)
+
+class ExtensionInitView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        serializer = ExtensionInitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        refresh = RefreshToken.for_user(AnonymousUser())
+        access_token = str(refresh.access_token)
+
+        return Response({
+            "access": access_token,
+            "expires_in": 3600,
+            "session_id": serializer.validated_data["device_id"]
+        }, status=200)
