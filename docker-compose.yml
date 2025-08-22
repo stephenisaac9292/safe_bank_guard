@@ -1,0 +1,16 @@
+services: 
+  web:
+    build: .
+    command: gunicorn safe_bank_guard.wsgi:application --bind 0.0.0.0:8000 --reload
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - media:/app/media
+    ports:
+      - "8000:8000"
+    # Remove this line: network_mode: "host"
+
+volumes:
+  postgres_data:
+  media:

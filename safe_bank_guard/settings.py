@@ -1,5 +1,5 @@
 from pathlib import Path
-from decouple import config
+from decouple import config, Csv
 import dj_database_url
 import os
 
@@ -21,7 +21,7 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Allowed Hosts
-ALLOWED_HOSTS = config("ALLOWED_HOSTS").split(",")
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
 
 
  
@@ -166,9 +166,7 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 
-#phistank config 
-PHISHTANK_API_KEY = config("PHISHTANK_API_KEY")
-PHISHTANK_USERNAME = config("PHISHTANK_USERNAME")
+
 
 #google safe browsing config
 GOOGLE_SAFE_BROWSING_API_KEY = config("GOOGLE_SAFE_BROWSING_API_KEY", default="aslfsoklefs")
